@@ -6,7 +6,7 @@
 
 using namespace std;
 
-class thd: public controlled_module
+class thd: public SimpleFramework::controlled_module
 {
   public:
     virtual bool initialize()

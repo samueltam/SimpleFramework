@@ -15,7 +15,7 @@ class class1
   public:
     void test()
     {
-      ObjJanitor ja(*this,&class1::testJanitor);
+      SimpleFramework::ObjJanitor ja(*this,&class1::testJanitor);
     }
     
     void testJanitor()
