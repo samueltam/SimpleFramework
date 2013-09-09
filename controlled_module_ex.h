@@ -32,19 +32,19 @@ namespace SimpleFramework
     boost::any par;
   };
 
-#define BM_RESERVE 1000
-#define BM_RING_START BM_RESERVE+1
-#define BM_RING_STOP BM_RESERVE+2
-#define BM_RING_SETTIME  BM_RESERVE+3
-#define BM_RING_SETPARENT BM_RESERVE+4
-#define BM_RING_CYCLE BM_RESERVE+5
-#define BM_RING_PROCESS BM_RESERVE+6
-#define BM_RING_PROCESSEND BM_RESERVE+7
+#define BM_RESERVE          1000
+#define BM_RING_START       BM_RESERVE+1
+#define BM_RING_STOP        BM_RESERVE+2
+#define BM_RING_SETTIME     BM_RESERVE+3
+#define BM_RING_SETPARENT   BM_RESERVE+4
+#define BM_RING_CYCLE       BM_RESERVE+5
+#define BM_RING_PROCESS     BM_RESERVE+6
+#define BM_RING_PROCESSEND  BM_RESERVE+7
 #define BM_RING_PROCESSFAIL BM_RESERVE+8
-#define BM_TIMER    BM_RESERVE+9
-#define BM_COMMAND  BM_RESERVE+10
-#define BM_NOTIFY   BM_RESERVE+11
-#define BM_USER 9000
+#define BM_TIMER            BM_RESERVE+9
+#define BM_COMMAND          BM_RESERVE+10
+#define BM_NOTIFY           BM_RESERVE+11
+#define BM_USER             9000
 
   class controlled_timer;
   class controlled_module_ex : public controlled_module
@@ -73,6 +73,9 @@ namespace SimpleFramework
         cmd->nCmd = nCmd;
         cmd->anyParam = p;
         m_list_command.push_back(cmd);
+
+        m_event_command.notify_all();
+
         return true;
       }
 
@@ -119,6 +122,8 @@ namespace SimpleFramework
         cmd->anyParam = p;
         m_list_command.push_back(cmd);
 
+        m_event_command.notify_all();
+
         return true;
       }
 
@@ -135,6 +140,7 @@ namespace SimpleFramework
         m_list_command.push_back(cmd);
 
         m_event_command.notify_all();
+
         return true;
       }
 
@@ -144,7 +150,7 @@ namespace SimpleFramework
           return false;
         else
         {
-          sleep(this->m_sleeptime);
+          boost::this_thread::sleep(boost::posix_time::seconds(this->m_sleeptime));
           return true;
         }
       }
@@ -376,11 +382,11 @@ namespace SimpleFramework
       int m_time;
       int m_step;
     public:
-      void starttimer(int time,controlled_module_ex* parent)
+      void starttimer(int time, controlled_module_ex* parent)
       {
         this->safestart();
-        this->postmessage(BM_RING_SETPARENT,parent);
-        this->postmessage(BM_RING_SETTIME,time);
+        this->postmessage(BM_RING_SETPARENT, parent);
+        this->postmessage(BM_RING_SETTIME, time);
       }
 
       void stoptimer()
@@ -398,6 +404,7 @@ namespace SimpleFramework
       virtual void message(const _command & cmd)
       {
         controlled_module_ex::message(cmd);
+
         if (cmd.nCmd == BM_RING_SETTIME)
         {
           int time = boost::any_cast<int>(cmd.anyParam);
@@ -412,14 +419,16 @@ namespace SimpleFramework
         {
           if (m_time > 0)
           {
-            if (m_step > m_time)
+            if (m_step >= m_time)
             {
               m_parent->postmessage(BM_TIMER, this);
-              m_step=0;
+              m_step = 0;
             }
 
             m_step++;
           }
+
+          boost::this_thread::sleep(boost::posix_time::seconds(this->m_sleeptime));
 
           this->postmessage(BM_RING_CYCLE);
         } 
