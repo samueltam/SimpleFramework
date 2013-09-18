@@ -7,6 +7,9 @@ using namespace std;
 
 class thdex1 : public SimpleFramework::controlled_module_ex
 {
+  public:
+    thdex1() : SimpleFramework::controlled_module_ex("thdex1") {}
+
   protected:
     virtual void message(const SimpleFramework::_command & cmd)
     {
@@ -26,6 +29,9 @@ struct mystruct2
 
 class thdex2 : public SimpleFramework::controlled_module_ex
 {
+  public:
+    thdex2() : SimpleFramework::controlled_module_ex("thdex2") {}
+
   protected:
     virtual void message(const SimpleFramework::_command & cmd)
     {
@@ -54,6 +60,9 @@ struct mystruct3
 
 class thdex3 : public SimpleFramework::controlled_module_ex
 {
+  public:
+    thdex3() : SimpleFramework::controlled_module_ex("thdex3") {}
+
   protected:
     virtual void message(const SimpleFramework::_command & cmd)
     {
@@ -72,6 +81,9 @@ class thdex3 : public SimpleFramework::controlled_module_ex
 
 class thdex4 : public SimpleFramework::controlled_module_ex
 {
+  public:
+    thdex4() : SimpleFramework::controlled_module_ex("thdex4") {}
+
   protected:
     boost::any on_command(const unsigned int command,const boost::any par)
     {
@@ -96,6 +108,9 @@ class thdex4 : public SimpleFramework::controlled_module_ex
 
 class thdex5: public SimpleFramework::controlled_module_ex
 {
+  public:
+    thdex5() : SimpleFramework::controlled_module_ex("thdex5") {}
+
   protected:
     virtual void on_timer(const SimpleFramework::controlled_timer *p)
     {
@@ -151,7 +166,7 @@ int main(int argc, char* argv[])
   t4.safestop();
 
   thdex5 t5;
-  SimpleFramework::controlled_timer timer;
+  SimpleFramework::controlled_timer timer("test_timer");
   t5.safestart();
   timer.starttimer(3,&t5);
   printf("Please hit Enter:");

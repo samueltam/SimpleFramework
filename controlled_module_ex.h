@@ -1,6 +1,7 @@
 #ifndef __CONTROLLED_MODULE_EX__
 #define __CONTROLLED_MODULE_EX__
 
+#include <string>
 #include <boost/shared_ptr.hpp>
 #include <boost/any.hpp>
 #include "controlled_module.h"
@@ -50,8 +51,9 @@ namespace SimpleFramework
   class controlled_module_ex : public controlled_module
   {
     public:
-      controlled_module_ex() :
+      controlled_module_ex(const std::string& name) :
         m_safe(false),
+        m_name(name),
         m_safestarted(false),
         m_safestopped(false)
     {
@@ -60,6 +62,11 @@ namespace SimpleFramework
       ~controlled_module_ex()
       {
         safestop();
+      }
+
+      const std::string& name()
+      {
+        return m_name;
       }
 
     public:
@@ -358,6 +365,8 @@ namespace SimpleFramework
       mutable bool m_safestopped;
 
       bool m_safe;//在多线程，尤其牵涉到线程之间有类似socket级别关联时，当父线程safestop以后有可能会收到其他线程的postmessage，这时会引起线程死锁，这个m_safe就是解决这个问题的，当safestop以后不再接收新消息处理
+      std::string m_name;
+
       boost::condition m_event_command;
       boost::mutex m_mutex_command;
       std::list<_command::CCmdPtr> m_list_command;
@@ -366,7 +375,8 @@ namespace SimpleFramework
   class controlled_timer: public controlled_module_ex
   {
     public:
-      controlled_timer()
+      controlled_timer(const std::string& name) :
+        controlled_module_ex(name)
       {
         this->m_time = 0;
         this->m_parent = 0;
