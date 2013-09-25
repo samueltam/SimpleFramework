@@ -1,45 +1,61 @@
 #include <iostream>
 #include <string>
 
+#include "simple_socket.h"
 #include "simple_application.h"
 
 using namespace std;
 
-class comp1 : public SimpleFramework::simple_component
+class test_component
 {
   public:
-    comp1(unsigned int id, SimpleFramework::simple_func_table* func_tab) : SimpleFramework::simple_component(id, func_tab) {}
     static void handle_test_message(SimpleFramework::simple_message& msg)
     {
-      printf("get test message!\n");
+      cout << "receive test message" << endl;
+
+      boost::shared_ptr<SimpleFramework::simple_message::msg_data> data = msg.get_data();
+
+      char* ptr = data->data_;
+      printf("receive: ");
+      for (int i = 0; i < data->data_len_; i++)
+      {
+        printf("0x%x ", ptr[i]);
+      }
+      printf("\n");
     }
 };
 
-SimpleFramework::simple_func_table func_tab1[] =
+SimpleFramework::simple_function_table test_functions[] =
 {
-  {1, &comp1::handle_test_message},
-  {SIMPLE_COMPONENT_INVALID_CODE, 0}
+  {BM_USER_MESSAGE, &test_component::handle_test_message},
+  {BM_USER_MESSAGE+1, 0}
 };
 
-class engine1 : public SimpleFramework::simple_engine
+class thdex5: public SimpleFramework::controlled_module_ex
 {
   public:
-    engine1() : SimpleFramework::simple_engine("engine1") {}
-
-};
-
-class engine2: public SimpleFramework::simple_engine
-{
-  public:
-    engine2() : SimpleFramework::simple_engine("engine2") {}
+    thdex5() : SimpleFramework::controlled_module_ex("thdex5") 
+    {
+      socket_ = boost::shared_ptr<SimpleFramework::simple_udp_socket>(new SimpleFramework::simple_udp_socket("localhost", 10001));
+    }
 
   protected:
     virtual void on_timer(const SimpleFramework::controlled_timer *p)
     {
-      SimpleFramework::simple_message msg(1, 1, 1);
-      SimpleFramework::get_engine("engine1")->postmessage(BM_USER_MESSAGE, msg);
       cout << "ontimer" << endl;
+
+      SimpleFramework::simple_address sender("localhost", 10001);
+      SimpleFramework::simple_address receiver("localhost", 10000);
+      char* text = "12345678";
+      SimpleFramework::simple_message msg(sender, receiver, BM_USER_MESSAGE, text, 8);
+
+      msg.send(*socket_);
+
+      //socket_->send_msg(receiver, text, 8);
     }
+
+  private:
+    boost::shared_ptr<SimpleFramework::simple_udp_socket> socket_;
 };
 
 int main(int argc, char* argv[])
@@ -48,15 +64,13 @@ int main(int argc, char* argv[])
 
   app->initialize(argc, argv);
 
-  engine1* e1 = new engine1();
-  comp1* c1 = new comp1(1, func_tab1);
-  e1->add_component(c1);
-  app->add_engine(e1);
+  SimpleFramework::simple_engine* engine1 = new SimpleFramework::simple_engine("test_compnont", test_functions);
+  app->add_engine(engine1);
 
+  thdex5 t5;
   SimpleFramework::controlled_timer timer("test_timer");
-  engine2* e2 = new engine2();
-  timer.starttimer(3, e2);
-  app->add_engine(e2);
+  t5.safestart();
+  timer.starttimer(3,&t5);
 
   app->start();
 }

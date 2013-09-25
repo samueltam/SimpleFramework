@@ -14,118 +14,164 @@ namespace SimpleFramework
 
 #define BM_USER_MESSAGE     10000
 
-  class simple_message
-  {
-    public:
-      simple_message(unsigned int code, unsigned int dest, unsigned int src) : 
-        code_(code),
-        dest_(dest),
-        src_(src)
-    {
-    }
-
-      unsigned long get_code()
-      {
-        return code_;
-      }
-
-      unsigned long get_dest()
-      {
-        return dest_;
-      }
-
-      unsigned long get_src()
-      {
-        return src_;
-      }
-
-    private:
-      unsigned int code_;
-      unsigned int dest_;
-      unsigned int src_;
-  };
+#define SIMPLE_MESSAGE_RESERV   1000
+#define SIMPLE_MESSAGE_JOURNALLING  SIMPLE_MESSAGE_RESERV+1
 
 #define SIMPLE_COMPONENT_INVALID_CODE       0
 
-  class simple_component;
+  class simple_engine;
+
+  void register_engine(uint32_t func_start, uint32_t func_end, simple_engine* engine);
 
   typedef void (*simple_message_handler) (simple_message& msg);
   typedef struct 
   {
     unsigned int code_;
     simple_message_handler handler_;
-  } simple_func_table;
-
-  class simple_component
-  {
-    public:
-      simple_component(unsigned int id, simple_func_table* func_table) : 
-        id_(id),
-        func_table_(func_table)
-    {}
-      ~simple_component() { func_table_ = 0; }
-
-      unsigned long id()
-      {
-        return id_;
-      }
-
-      void handle_message(simple_message& msg)
-      {
-        simple_func_table* ptr = func_table_;
-
-        while (ptr->code_ != SIMPLE_COMPONENT_INVALID_CODE)
-        {
-          if (ptr->code_ == msg.get_code())
-          {
-            (*(ptr->handler_))(msg);
-            break;
-          }
-
-          ptr++;
-        }
-      }
-
-      void set_message_handler(simple_func_table* func_tab)
-      {
-        func_table_ = func_tab;
-      }
-
-    private:
-      unsigned int id_;
-      simple_func_table* func_table_;
-  };
+  } simple_function_table;
 
   class simple_engine : public controlled_module_ex
   {
     public:
-      simple_engine(const std::string& name) : SimpleFramework::controlled_module_ex(name) {}
-      ~simple_engine() {}
+      simple_engine(const std::string& name, simple_function_table* func_table) : 
+        SimpleFramework::controlled_module_ex(name), 
+        func_table_(func_table) 
+    {
+      uint32_t func_start = func_table_[0].code_;
+      uint32_t func_end;
+      simple_function_table* ptr = func_table_;
 
-      void add_component(simple_component* comp)
-      {
-        components_.insert(std::pair<unsigned int, simple_component*>(comp->id(), comp));
-      }
+      while (ptr->handler_ != 0)
+        ptr++;
+
+      func_end = ptr->code_;
+
+      register_engine(func_start, func_end, this);
+    }
+
+      ~simple_engine() {}
 
     protected:
       virtual void message(const SimpleFramework::_command& cmd)
       {
         controlled_module_ex::message(cmd);
 
-        if (cmd.nCmd == BM_USER_MESSAGE)
+        if (func_table_)
         {
-          printf("Receive user message!\n");
-          simple_message msg = boost::any_cast<simple_message>(cmd.anyParam);
-          std::map<unsigned int, simple_component*>::iterator it = components_.find(msg.get_dest());
-          if (it != components_.end())
+          simple_function_table* ptr = func_table_;
+
+          while (ptr->handler_ != 0)
           {
-            it->second->handle_message(msg);
+            if (cmd.nCmd == ptr->code_)
+            {
+              printf("Receive user message!\n");
+              simple_message msg = boost::any_cast<simple_message>(cmd.anyParam);
+              (*ptr->handler_)(msg);
+              break;
+            }
+
+            ptr++;
           }
         }
       }
 
     private:
-      std::map<unsigned int, simple_component*> components_;
+      simple_function_table* func_table_;
+  };
+
+  class simple_dispatcher
+  {
+    public:
+      typedef struct
+      {
+        uint32_t func_start_;
+        uint32_t func_end_;
+        simple_engine* engine_;
+      } dispatch_info;
+
+      static simple_dispatcher* instance()
+      {
+        if (instance__ == 0)
+          instance__ = new simple_dispatcher();
+
+        return instance__;
+      }
+
+      void register_engine(uint32_t func_start, uint32_t func_end, simple_engine* engine)
+      {
+        dispatch_info info;
+
+        info.func_start_ = func_start;
+        info.func_end_ = func_end;
+        info.engine_ = engine;
+
+        dispatch_info_list_.push_back(info);
+      }
+
+      void dispatch(uint32_t func_no, simple_message& msg)
+      {
+        for (std::vector<dispatch_info>::iterator it = dispatch_info_list_.begin();
+            it != dispatch_info_list_.end();
+            it++)
+        {
+          if (func_no >= it->func_start_ && func_no <= it->func_end_)
+          {
+            it->engine_->postmessage(func_no, msg);
+            return;
+          }
+        }
+
+        printf("Can't handle message with func_no %d\n", func_no);
+      }
+
+    private:
+      simple_dispatcher() {}
+
+      static simple_dispatcher* instance__;
+
+      std::vector<dispatch_info> dispatch_info_list_;
+  };
+
+  simple_dispatcher* simple_dispatcher::instance__(0);
+
+  inline void register_engine(uint32_t func_start, uint32_t func_end, simple_engine* engine)
+  {
+    simple_dispatcher::instance()->register_engine(func_start, func_end, engine);
+  }
+
+  inline void dispatch(uint32_t func_no, simple_message& msg)
+  {
+    simple_dispatcher::instance()->dispatch(func_no, msg);
+  }
+
+  class simple_socket_server : public controlled_module
+  {
+    public:
+      simple_socket_server(const char* addr, int port)
+      {
+        socket_ = boost::shared_ptr<simple_udp_socket>(new simple_udp_socket(addr, port));
+      }
+
+      virtual bool work()
+      {
+        simple_address sender;
+        char buffer[MAX_MESSAGE_LEN];
+        simple_message::msg_header* msg_hdr = (simple_message::msg_header*) buffer;
+        int recv_len;
+
+        if (socket_->select(10000))
+        {
+          recv_len = socket_->recv_msg(sender, (void*) buffer, MAX_MESSAGE_LEN);
+
+          simple_message msg(sender, socket_->get_address(), msg_hdr->func_no_, buffer + sizeof(simple_message::msg_header), recv_len - sizeof(simple_message::msg_header));
+          dispatch(msg_hdr->func_no_, msg);
+        }
+
+        return true;
+      }
+
+    private:
+      boost::shared_ptr<simple_udp_socket> socket_;
   };
 
   class simple_application
@@ -159,6 +205,8 @@ namespace SimpleFramework
         signal_handlers_[SIGABRT] = &simple_application::exit_signal_handler;
         signal_handlers_[SIGKILL] = &simple_application::exit_signal_handler;
         signal_handlers_[SIGSTOP] = &simple_application::exit_signal_handler;
+
+        socket_server_ = boost::shared_ptr<simple_socket_server>(new simple_socket_server("localhost", 10000)); 
       }
 
       ~simple_application() {}
@@ -191,6 +239,10 @@ namespace SimpleFramework
 
         printf("all engines started\n");
 
+        socket_server_->start();
+
+        printf("socket server started\n");
+
         while (!stop_)
         {
           int signo;
@@ -212,6 +264,8 @@ namespace SimpleFramework
             handler(signo);
           }
         }
+
+        socket_server_->die();
 
         for (std::vector<simple_engine*>::iterator it = engines_.begin(); it != engines_.end(); it++)
         {
@@ -265,6 +319,8 @@ namespace SimpleFramework
       int argc_;
       char** argv_;
       bool stop_;
+      boost::shared_ptr<simple_socket_server> socket_server_;
+
       std::vector<simple_engine*> engines_;
       std::map<int, signal_handler> signal_handlers_;
   };
