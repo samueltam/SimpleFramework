@@ -168,13 +168,12 @@ namespace SimpleFramework
 
         socklen_t size = sizeof(sockaddr);
         int len = recvfrom(socket_id_, (char*)data, maxsize, 0, (struct sockaddr*) &(sender.addr), &size);
-        sender.addr.sin_port = ntohs(sender.addr.sin_port);
         printf("receive %d bytes\n", len);
 
         return len;
       }
 
-      int send_msg(simple_address& receiver, const void* data, int size)
+      int send_msg(simple_address& receiver, const void* data, int size) const
       {
         if (size < 0)
           return -1;
@@ -358,7 +357,7 @@ namespace SimpleFramework
         data_ = msg.data_;
       }
 
-      void send(simple_udp_socket& socket)
+      void send(const simple_udp_socket& socket) 
       {
         socket.send_msg(receiver_, data_->buf_, data_->total_len_);
       }
@@ -367,6 +366,9 @@ namespace SimpleFramework
       {
         return data_;
       }
+
+      simple_address& get_sender() { return sender_; }
+      simple_address& get_receiver() { return receiver_; }
 
     private:
       simple_address sender_;

@@ -12,12 +12,10 @@
 namespace SimpleFramework
 {
 
-#define BM_USER_MESSAGE     10000
+#define BM_USER_INCOMING_MESSAGE      10000
+#define BM_USER_OUTGOING_MESSAGE      BM_USER_INCOMING_MESSAGE+1
 
-#define SIMPLE_MESSAGE_RESERV   1000
-#define SIMPLE_MESSAGE_JOURNALLING  SIMPLE_MESSAGE_RESERV+1
-
-#define SIMPLE_COMPONENT_INVALID_CODE       0
+#define SIMPLE_FUNCTION_RESERV   1000
 
   class simple_engine;
 
@@ -56,22 +54,26 @@ namespace SimpleFramework
       {
         controlled_module_ex::message(cmd);
 
-        if (func_table_)
+        if (func_table_ == 0)
+          return;
+
+        simple_function_table* ptr = func_table_;
+
+        if (cmd.nCmd != BM_USER_INCOMING_MESSAGE)
+          return;
+
+        simple_message msg = boost::any_cast<simple_message>(cmd.anyParam);
+
+        while (ptr->handler_ != 0)
         {
-          simple_function_table* ptr = func_table_;
-
-          while (ptr->handler_ != 0)
+          if (msg.get_data()->head_->func_no_ == ptr->code_)
           {
-            if (cmd.nCmd == ptr->code_)
-            {
-              printf("Receive user message!\n");
-              simple_message msg = boost::any_cast<simple_message>(cmd.anyParam);
-              (*ptr->handler_)(msg);
-              break;
-            }
-
-            ptr++;
+            printf("Receive user message!\n");
+            (*ptr->handler_)(msg);
+            break;
           }
+
+          ptr++;
         }
       }
 
@@ -116,7 +118,7 @@ namespace SimpleFramework
         {
           if (func_no >= it->func_start_ && func_no <= it->func_end_)
           {
-            it->engine_->postmessage(func_no, msg);
+            it->engine_->postmessage(BM_USER_INCOMING_MESSAGE, msg);
             return;
           }
         }
@@ -147,9 +149,9 @@ namespace SimpleFramework
   class simple_socket_server : public controlled_module
   {
     public:
-      simple_socket_server(const char* addr, int port)
+      simple_socket_server(boost::shared_ptr<simple_udp_socket> socket)
       {
-        socket_ = boost::shared_ptr<simple_udp_socket>(new simple_udp_socket(addr, port));
+        socket_ = socket;
       }
 
       virtual bool work()
@@ -206,7 +208,8 @@ namespace SimpleFramework
         signal_handlers_[SIGKILL] = &simple_application::exit_signal_handler;
         signal_handlers_[SIGSTOP] = &simple_application::exit_signal_handler;
 
-        socket_server_ = boost::shared_ptr<simple_socket_server>(new simple_socket_server("localhost", 10000)); 
+        socket_ = boost::shared_ptr<simple_udp_socket>(new simple_udp_socket("localhost", 10000));
+        socket_server_ = boost::shared_ptr<simple_socket_server>(new simple_socket_server(socket_)); 
       }
 
       ~simple_application() {}
@@ -265,8 +268,10 @@ namespace SimpleFramework
           }
         }
 
+        printf("stopping socket server\n");
         socket_server_->die();
 
+        printf("stopping all engines\n");
         for (std::vector<simple_engine*>::iterator it = engines_.begin(); it != engines_.end(); it++)
         {
           (*it)->safestop();
@@ -302,6 +307,8 @@ namespace SimpleFramework
         return 0;
       }
 
+      const simple_udp_socket& get_socket() { return *socket_; }
+
       void install_signal_handler(int signo, signal_handler handler)
       {
         signal_handlers_[signo] = handler;
@@ -320,6 +327,7 @@ namespace SimpleFramework
       char** argv_;
       bool stop_;
       boost::shared_ptr<simple_socket_server> socket_server_;
+      boost::shared_ptr<simple_udp_socket> socket_;
 
       std::vector<simple_engine*> engines_;
       std::map<int, signal_handler> signal_handlers_;
@@ -329,7 +337,12 @@ namespace SimpleFramework
 
   inline simple_engine* get_engine(const std::string& name)
   {
-    simple_application::instance()->get_engine(name);
+    return simple_application::instance()->get_engine(name);
+  }
+
+  inline const simple_udp_socket& get_socket()
+  {
+    return simple_application::instance()->get_socket();
   }
 
   class simple_application_exception_base : public std::exception

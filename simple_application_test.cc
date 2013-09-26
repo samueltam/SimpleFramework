@@ -22,13 +22,16 @@ class test_component
         printf("0x%x ", ptr[i]);
       }
       printf("\n");
+
+      SimpleFramework::simple_message msg_resp(msg.get_receiver(), msg.get_sender(), 0, data->data_, data->data_len_);
+      msg_resp.send(SimpleFramework::get_socket());
     }
 };
 
 SimpleFramework::simple_function_table test_functions[] =
 {
-  {BM_USER_MESSAGE, &test_component::handle_test_message},
-  {BM_USER_MESSAGE+1, 0}
+  {SIMPLE_FUNCTION_RESERV, &test_component::handle_test_message},
+  {SIMPLE_FUNCTION_RESERV+1, 0}
 };
 
 class thdex5: public SimpleFramework::controlled_module_ex
@@ -47,9 +50,15 @@ class thdex5: public SimpleFramework::controlled_module_ex
       SimpleFramework::simple_address sender("localhost", 10001);
       SimpleFramework::simple_address receiver("localhost", 10000);
       char* text = "12345678";
-      SimpleFramework::simple_message msg(sender, receiver, BM_USER_MESSAGE, text, 8);
+      SimpleFramework::simple_message msg1(sender, receiver, SIMPLE_FUNCTION_RESERV, text, 8);
 
-      msg.send(*socket_);
+      msg1.send(*socket_);
+
+      char buffer[MAX_MESSAGE_LEN];
+      int len;
+      len = socket_->recv_msg(receiver, (void*) buffer, MAX_MESSAGE_LEN);
+
+      printf("receive %d bytes from server!\n", len);
 
       //socket_->send_msg(receiver, text, 8);
     }
@@ -70,7 +79,7 @@ int main(int argc, char* argv[])
   thdex5 t5;
   SimpleFramework::controlled_timer timer("test_timer");
   t5.safestart();
-  timer.starttimer(3,&t5);
+  timer.starttimer(1,&t5);
 
   app->start();
 }
