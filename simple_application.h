@@ -15,6 +15,7 @@ namespace SimpleFramework
 #define BM_USER_INCOMING_MESSAGE      10000
 #define BM_USER_OUTGOING_MESSAGE      BM_USER_INCOMING_MESSAGE+1
 
+#define SIMPLE_JOURNALLING       0
 #define SIMPLE_FUNCTION_RESERV   1000
 
   class simple_engine;
@@ -157,16 +158,15 @@ namespace SimpleFramework
       virtual bool work()
       {
         simple_address sender;
-        char buffer[MAX_SIMPLE_MESSAGE_LEN];
-        simple_message::msg_head* msg_hdr = (simple_message::msg_head*) buffer;
+        bufferPtr buffer(new simple_buffer(MAX_SIMPLE_MESSAGE_LEN));
         int recv_len;
 
         if (socket_->select(10000))
         {
-          recv_len = socket_->recv_msg(sender, (void*) buffer, MAX_SIMPLE_MESSAGE_LEN);
+          recv_len = socket_->recv_msg(sender, (void*) buffer->buf_, MAX_SIMPLE_MESSAGE_LEN);
 
-          simple_message msg(sender, socket_->get_address(), msg_hdr->func_no_, buffer + sizeof(simple_message::msg_head), recv_len - sizeof(simple_message::msg_head));
-          dispatch(msg_hdr->func_no_, msg);
+          simple_message msg(sender, socket_->get_address(), buffer);
+          dispatch(msg.get_head().func_no_, msg);
         }
 
         return true;

@@ -159,7 +159,7 @@ namespace SimpleFramework
 
   };
 
-#define MAX_SIMPLE_MESSAGE_LEN     65507
+#define MAX_SIMPLE_MESSAGE_LEN     2048
 
   class simple_udp_socket
   {
@@ -327,6 +327,12 @@ namespace SimpleFramework
     char* buf_;
     int len_;
 
+    simple_buffer() : 
+      buf_(0),
+      len_(0)
+    {
+    }
+
     simple_buffer(int len)
     {
       buf_ = new char[len];
@@ -340,15 +346,19 @@ namespace SimpleFramework
         delete[] buf_;
     }
 
-    simple_buffer& operator=(const simple_buffer& buffer)
+    const simple_buffer& operator=(const simple_buffer& buffer)
     {
+      if (buf_ != 0)
+        delete[] buf_;
+
       buf_ = buffer.buf_;
       len_ = buffer.len_;
       return *this;
     }
 
-    const simple_buffer& operator+(const simple_buffer& buffer)
+    const simple_buffer operator+(const simple_buffer& buffer)
     {
+      assert(len_ + buffer.len_ > 0);
       simple_buffer buf_ret(len_ + buffer.len_);
       memcpy(buf_ret.buf_, buf_, len_);
       memcpy(buf_ret.buf_ + len_, buffer.buf_, buffer.len_);
@@ -386,6 +396,20 @@ namespace SimpleFramework
         head_->func_no_ = func_no;
         data_ = buffer_->buf_ + sizeof(msg_head);
         memcpy(data_, data, len);
+      }
+
+      simple_message(simple_address sender, simple_address receiver, bufferPtr buf)
+      {
+        if (buf->len_ > MAX_SIMPLE_MESSAGE_LEN)
+          throw simple_message_exception_invalid_parameter("simple_message::simple_message","buf");
+
+        sender_ = sender;
+        receiver_ = receiver;
+
+        buffer_ = buf;
+
+        head_ = (msg_head*) buffer_->buf_;
+        data_ = buffer_->buf_ + sizeof(msg_head);
       }
 
       ~simple_message() {}
