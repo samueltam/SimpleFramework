@@ -1,5 +1,5 @@
-#ifndef __SIMPLE_SOCKET_H__
-#define __SIMPLE_SOCKET_H__
+#ifndef __SIMPLE_MESSAGE_H__
+#define __SIMPLE_MESSAGE_H__
 
 #include <sys/resource.h>
 #include <sys/types.h>    /* basic system data types */
@@ -33,18 +33,24 @@ namespace SimpleFramework
 {
 #define SIMPLE_SOCKET_EXCEPTION_MSG_LEN 1024
 
-  class simple_socket_exception_base : public std::exception
+  class simple_message_exception_base : public std::exception
   {
     public:
-      ~simple_socket_exception_base() throw() {}
+      ~simple_message_exception_base() throw() {}
+
+      const char* what() const throw()
+      {
+        return err_msg.c_str();
+      }
+
     protected:
       std::string err_msg;
   };
 
-  class simple_socket_exception_socket_operation : public simple_socket_exception_base
+  class simple_message_exception_socket_operation : public simple_message_exception_base
   {
     public:
-      simple_socket_exception_socket_operation(std::string operation, int err)
+      simple_message_exception_socket_operation(std::string operation, int err)
       {
         std::stringstream ss;
 
@@ -55,12 +61,40 @@ namespace SimpleFramework
         err_msg = ss.str();
       }
 
-      ~simple_socket_exception_socket_operation() throw() {}
+      ~simple_message_exception_socket_operation() throw() {}
+  };
 
-      const char* what() const throw()
+  class simple_message_exception_element_not_available : public simple_message_exception_base
+  {
+    public:
+      simple_message_exception_element_not_available(std::string element)
       {
-        return err_msg.c_str();
+        std::stringstream ss;
+
+        ss << "Exception in get method. " 
+          << "element to get: " << element;
+
+        err_msg = ss.str();
       }
+
+      ~simple_message_exception_element_not_available() throw() {}
+  };
+
+  class simple_message_exception_invalid_parameter : public simple_message_exception_base
+  {
+    public:
+      simple_message_exception_invalid_parameter(std::string method, std::string parameter)
+      {
+        std::stringstream ss;
+
+        ss << "Exception in parameter." 
+          << " method name: " << method 
+          << " parameter name: " << parameter;
+
+        err_msg = ss.str();
+      }
+
+      ~simple_message_exception_invalid_parameter() throw() {}
   };
 
   struct simple_address
@@ -125,7 +159,7 @@ namespace SimpleFramework
 
   };
 
-#define MAX_MESSAGE_LEN     65507
+#define MAX_SIMPLE_MESSAGE_LEN     65507
 
   class simple_udp_socket
   {
@@ -200,7 +234,7 @@ namespace SimpleFramework
         socket_id_ = ::socket(AF_INET, SOCK_DGRAM, 0);
 
         if (socket_id_ == -1)
-          throw simple_socket_exception_socket_operation("socket()", socket_id_);
+          throw simple_message_exception_socket_operation("socket()", socket_id_);
 
         int recv_buf = 20*1024;
         int send_buf = 10*1024;
@@ -219,12 +253,12 @@ namespace SimpleFramework
           int flags = fcntl(socket_id_, F_GETFL);
 
           if (flags < 0)
-            throw simple_socket_exception_socket_operation("fcntl()", flags);
+            throw simple_message_exception_socket_operation("fcntl()", flags);
 
           flags |= O_NONBLOCK;
 
           if ((ret = fcntl(socket_id_, F_SETFL, flags)) < 0)
-            throw simple_socket_exception_socket_operation("fcntl()", ret);
+            throw simple_message_exception_socket_operation("fcntl()", ret);
         }
 
         sockaddr_in address;
@@ -234,7 +268,7 @@ namespace SimpleFramework
         address.sin_addr.s_addr = INADDR_ANY;
 
         if ((ret = bind(socket_id_, (struct sockaddr*) &address, sizeof(sockaddr))) < 0)
-          throw simple_socket_exception_socket_operation("bind()", ret);
+          throw simple_message_exception_socket_operation("bind()", ret);
       }
 
       void close()
@@ -273,7 +307,7 @@ namespace SimpleFramework
           if (errno == EINTR)
             return false;
           else
-            throw simple_socket_exception_socket_operation("select()", errno);
+            throw simple_message_exception_socket_operation("select()", errno);
         }
 
         if (ret == 0)
@@ -288,64 +322,70 @@ namespace SimpleFramework
       bool block_;
   };
 
+  struct simple_buffer
+  {
+    char* buf_;
+    int len_;
+
+    simple_buffer(int len)
+    {
+      buf_ = new char[len];
+      len_ = len;
+      memset(buf_, 0, len_);
+    }
+
+    ~simple_buffer()
+    {
+      if (buf_ != 0)
+        delete[] buf_;
+    }
+
+    simple_buffer& operator=(const simple_buffer& buffer)
+    {
+      buf_ = buffer.buf_;
+      len_ = buffer.len_;
+      return *this;
+    }
+
+    const simple_buffer& operator+(const simple_buffer& buffer)
+    {
+      simple_buffer buf_ret(len_ + buffer.len_);
+      memcpy(buf_ret.buf_, buf_, len_);
+      memcpy(buf_ret.buf_ + len_, buffer.buf_, buffer.len_);
+      return buf_ret;
+    }
+  };
+
+  typedef boost::shared_ptr<simple_buffer> bufferPtr;
+
   class simple_message
   {
     public:
-      struct __attribute__((packed)) msg_header
+      struct __attribute__((packed)) msg_head
       {
         uint32_t msg_len_;
         uint32_t func_no_;
         uint32_t padding_;
       };
 
-      struct msg_data
-      {
-        char* buf_;
-        msg_header* head_;
-        char* data_;
-        int data_len_;
-        int total_len_;
-
-        msg_data(const char* data, int len)
-        {
-          total_len_  = len + sizeof(msg_header);
-          buf_ = new char[total_len_];
-          memset(buf_, 0, total_len_);
-          memcpy(buf_ + sizeof(msg_header), data, len);
-
-          head_ = (msg_header*) buf_;
-          data_ = buf_ + sizeof(msg_header);
-          data_len_ = len;
-        }
-
-        ~msg_data()
-        {
-          if (buf_ != 0)
-            delete buf_;
-        }
-        
-        msg_data& operator=(const msg_data& data)
-        {
-          buf_ = data.buf_;
-          head_ = data.head_;
-          data_ = data.data_;
-          data_len_ = data.data_len_;
-          total_len_ = data.total_len_;
-        }
-      };
-
       simple_message() :
         sender_(AF_INET),
         receiver_(AF_INET)
-        {}
+    {}
 
       simple_message(simple_address sender, simple_address receiver, uint32_t func_no, const char* data, int len)
       {
+        if (len > MAX_SIMPLE_MESSAGE_LEN - sizeof(msg_head))
+          throw simple_message_exception_invalid_parameter("simple_message::simple_message","len");
+
         sender_ = sender;
         receiver_ = receiver;
-        data_ = boost::shared_ptr<msg_data>(new msg_data(data, len));
-        data_->head_->msg_len_ = len;
-        data_->head_->func_no_ = func_no;
+        buffer_ = bufferPtr(new simple_buffer(sizeof(msg_head) + len));
+        head_ = (msg_head*) buffer_->buf_;
+        head_->msg_len_ = len;
+        head_->func_no_ = func_no;
+        data_ = buffer_->buf_ + sizeof(msg_head);
+        memcpy(data_, data, len);
       }
 
       ~simple_message() {}
@@ -354,17 +394,30 @@ namespace SimpleFramework
       {
         sender_ = msg.sender_;
         receiver_ = msg.receiver_;
+        buffer_ = msg.buffer_;
+        head_ = msg.head_;
         data_ = msg.data_;
       }
 
       void send(const simple_udp_socket& socket) 
       {
-        socket.send_msg(receiver_, data_->buf_, data_->total_len_);
+        socket.send_msg(receiver_, buffer_->buf_, buffer_->len_);
       }
 
-      boost::shared_ptr<msg_data> get_data()
+      const msg_head& get_head()
       {
-        return data_;
+        if (head_ != 0)
+          return *head_;
+        else
+          throw simple_message_exception_element_not_available("simple_message::head_");
+      }
+
+      const char* get_data()
+      {
+        if (data_ != 0)
+          return data_;
+        else
+          throw simple_message_exception_element_not_available("simple_message::data_");
       }
 
       simple_address& get_sender() { return sender_; }
@@ -373,7 +426,9 @@ namespace SimpleFramework
     private:
       simple_address sender_;
       simple_address receiver_;
-      boost::shared_ptr<msg_data> data_;
+      bufferPtr buffer_;
+      msg_head* head_;
+      char* data_;
   };
 }
 

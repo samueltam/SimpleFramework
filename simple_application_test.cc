@@ -1,7 +1,7 @@
 #include <iostream>
 #include <string>
 
-#include "simple_socket.h"
+#include "simple_message.h"
 #include "simple_application.h"
 
 using namespace std;
@@ -13,17 +13,15 @@ class test_component
     {
       cout << "receive test message" << endl;
 
-      boost::shared_ptr<SimpleFramework::simple_message::msg_data> data = msg.get_data();
-
-      char* ptr = data->data_;
+      const char* ptr = msg.get_data();
       printf("receive: ");
-      for (int i = 0; i < data->data_len_; i++)
+      for (int i = 0; i < msg.get_head().msg_len_; i++)
       {
         printf("0x%x ", ptr[i]);
       }
       printf("\n");
 
-      SimpleFramework::simple_message msg_resp(msg.get_receiver(), msg.get_sender(), 0, data->data_, data->data_len_);
+      SimpleFramework::simple_message msg_resp(msg.get_receiver(), msg.get_sender(), 0, ptr, msg.get_head().msg_len_);
       msg_resp.send(SimpleFramework::get_socket());
     }
 };
@@ -54,9 +52,9 @@ class thdex5: public SimpleFramework::controlled_module_ex
 
       msg1.send(*socket_);
 
-      char buffer[MAX_MESSAGE_LEN];
+      char buffer[MAX_SIMPLE_MESSAGE_LEN];
       int len;
-      len = socket_->recv_msg(receiver, (void*) buffer, MAX_MESSAGE_LEN);
+      len = socket_->recv_msg(receiver, (void*) buffer, MAX_SIMPLE_MESSAGE_LEN);
 
       printf("receive %d bytes from server!\n", len);
 

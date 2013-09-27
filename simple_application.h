@@ -66,7 +66,7 @@ namespace SimpleFramework
 
         while (ptr->handler_ != 0)
         {
-          if (msg.get_data()->head_->func_no_ == ptr->code_)
+          if (msg.get_head().func_no_ == ptr->code_)
           {
             printf("Receive user message!\n");
             (*ptr->handler_)(msg);
@@ -157,15 +157,15 @@ namespace SimpleFramework
       virtual bool work()
       {
         simple_address sender;
-        char buffer[MAX_MESSAGE_LEN];
-        simple_message::msg_header* msg_hdr = (simple_message::msg_header*) buffer;
+        char buffer[MAX_SIMPLE_MESSAGE_LEN];
+        simple_message::msg_head* msg_hdr = (simple_message::msg_head*) buffer;
         int recv_len;
 
         if (socket_->select(10000))
         {
-          recv_len = socket_->recv_msg(sender, (void*) buffer, MAX_MESSAGE_LEN);
+          recv_len = socket_->recv_msg(sender, (void*) buffer, MAX_SIMPLE_MESSAGE_LEN);
 
-          simple_message msg(sender, socket_->get_address(), msg_hdr->func_no_, buffer + sizeof(simple_message::msg_header), recv_len - sizeof(simple_message::msg_header));
+          simple_message msg(sender, socket_->get_address(), msg_hdr->func_no_, buffer + sizeof(simple_message::msg_head), recv_len - sizeof(simple_message::msg_head));
           dispatch(msg_hdr->func_no_, msg);
         }
 
